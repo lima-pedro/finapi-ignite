@@ -60,12 +60,6 @@ function getBalance (statement) {
 server.post("/customers", existCustomer ,(request, response) => {
     const { cpf, name } = request.body;
 
-    const isExistsCustomer = customers.some((customer) => customer.cpf === cpf);
-
-    if (isExistsCustomer) {
-        return response.status(400).json({ error: "Customer already registered!" })
-    }
-
     const newCustomer = {
         _id: uuid(),
         cpf,
@@ -73,12 +67,13 @@ server.post("/customers", existCustomer ,(request, response) => {
         statement: []
     }
     customers.push(newCustomer);
-    return response.status(201).json({ message: "Customer created succesfully" })
+    return response.status(201).send();
 });
 
-server.get("/statements/:cpf", existCustomer, (request, response) => {
-    const { findCustomer } = request;
-    return response.status(200).json({ data: findCustomer.statement });
+server.get("/statement", existCustomer, (request, response) => {
+    const { customer } = request;
+
+    return response.status(200).json(customer.statement);
 })
 
 server.post("/deposit/:cpf", existCustomer, (request, response) => {
