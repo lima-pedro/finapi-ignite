@@ -7,6 +7,9 @@ server.use(express.json());
 let customers = [];
 
 // MIDDLEWARE
+/** Middleware serve para validarmos dados antes de chegarmos à rota de destino
+ *  Funciona como um interceptador de requisições
+ */
 function existCustomer (request, response, next) {
     const { cpf: cpfParams } = request.params;
     const { cpf: cpfBody } = request.body;
@@ -14,13 +17,22 @@ function existCustomer (request, response, next) {
 
     let findCustomer;
 
+    /** Para validarmos os dados, fazemos isso dentro do middlewares e NÂO executamos
+     *  a função next()
+     */
     if (cpfHeader) {
         const numberCpf = Number(cpfHeader);
         findCustomer = customers.find(customer => customer.cpf === numberCpf);
         if (!findCustomer) {
+            /** Lembre-se: Toda vez que o return é executado, nada abaixo é executado
+             *  então o código é finalizado
+             */
             return response.status(404).json({ error: "Customer not found!" });
         }
+        /** Podemos adicionar informções dentro do request, adicionando o modelo chave: valor do Objeto */
         request.customer = findCustomer;
+        /** O next() quando executado, direciona para a rota chamada pleo client */
+        return next();
     }
 
     if (cpfParams) {
@@ -30,6 +42,7 @@ function existCustomer (request, response, next) {
             return response.status(404).json({ error: "Customer not found!" });
         }
         request.findCustomer = findCustomer;
+        return next();
     }
 
     if (cpfBody && typeof cpfBody !== "number") {
@@ -41,18 +54,27 @@ function existCustomer (request, response, next) {
         if (findCustomer) {
             return response.status(400).json({ error: "Customer already registered!" })
         }
-    }
 
-    return next();
+        return next();
+    }
 }
 
+/** Essa também é uma forma de declarar um middleware
+ *  tudo que estiver abaixo da declaração passará primeiro pelo middleware
+ */
+// app.use(existCustomer);
+
 function getBalance (statement) {
+    /** A função reduce acumula um valor de acordo com a lógica impĺementada dentro da função */
     const balance = statement.reduce((acc, operation) => {
+        /** Nesse caso se a operation for 'credit' a função soma o operation.amount ao acumulador*/
         if (operation.type === 'credit') {
             return acc + operation.amount;
         } else if (operation.type === 'debit') {
+            /** Se for 'débito' ela retira o valor do acumulador */
             return acc - operation.amount;
         }
+        /** Aqui vai o valor inicial do acumulador */
     }, 0);
     return balance;
 }
@@ -76,6 +98,36 @@ server.get("/statement", existCustomer, (request, response) => {
     return response.status(200).json(customer.statement);
 })
 
+server.get("/statement/date", existCustomer, (request, response) => {
+    // http://localhost:3333/statement/date?date=01%2F03%2F2022
+    /** O formato acima é o formato da rota, enviado a data via query, %2F é a barra */
+
+    const { customer } = request;
+    const { date } = request.query
+    console.log(date)
+
+    /** Hack para pegar o dia inteiro indiferente da hora, ou seja, o client envia a data formatada
+     *  pegamos e concatenamos com 00:00 e fazemos o filter comparando as datas
+     */
+    const dateFormat = new Date(date);
+    console.log(dateFormat)
+
+    console.log(dateFormat.toDateString());
+
+    const statements = customer.statement.filter((statement) => {
+        console.log(statement.createdAt)
+        console.log(statement.createdAt.toDateString())
+        return statement.createdAt.toDateString() === new Date(dateFormat).toDateString()
+    });
+
+    console.log(statements);
+    if (!statements) {
+        return response.status(404).json({ error: "Statements not found!" })
+    }
+
+    return response.status(200).json(statements);
+})
+
 server.post("/deposit/:cpf", existCustomer, (request, response) => {
     const { findCustomer } = request;
     const { description, amount, type } = request.body;
@@ -87,7 +139,7 @@ server.post("/deposit/:cpf", existCustomer, (request, response) => {
     }
 
     if (!payload.amount) {
-        return response.status(422).json({ error: "The value field needs to be sent in scope!" })
+        return response.status(422).json({ error: "The amount field needs to be sent in scope!" })
     }
 
     if (!payload.type) {
@@ -99,11 +151,11 @@ server.post("/deposit/:cpf", existCustomer, (request, response) => {
     }
 
     if (payload.type !== "credit") {
-        return response.status(400).json({ error: "The type field must be a 'deposit'!" })
+        return response.status(400).json({ error: "The type field must be a 'credit'!" })
     }
 
     if (typeof payload.amount !== "number") {
-        return response.status(400).json({ error: "The value field must be a number!" })
+        return response.status(400).json({ error: "The amount field must be a number!" })
     }
 
     findCustomer.statement.push(payload);
